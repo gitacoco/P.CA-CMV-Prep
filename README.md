@@ -39,10 +39,11 @@ Go to https://vercel.com/new, import the repo. Framework auto-detects as
 ### 3. Add a Redis store for cloud sync
 
 In your Vercel project: **Storage → Create Database → Upstash (Redis / KV)**
-(Vercel Marketplace). Create it and **connect it to this project**. Vercel
-auto-injects the connection env vars (`UPSTASH_REDIS_REST_URL` /
+(Vercel Marketplace). Create it and **connect it to this project**. The app
+supports both REST-style Upstash credentials (`UPSTASH_REDIS_REST_URL` /
 `UPSTASH_REDIS_REST_TOKEN`, or the older `KV_REST_API_URL` /
-`KV_REST_API_TOKEN` — the app reads either pair).
+`KV_REST_API_TOKEN`) and connection-string style variables from newer Vercel
+Redis integrations (`REDIS_URL`, `KV_URL`, or custom-prefixed `...REDIS_URL`).
 
 The Upstash free tier is far more than enough for personal use.
 
@@ -78,6 +79,13 @@ For local cloud-sync testing, create `.env.local`:
 ```
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
+APP_SECRET=some-long-random-string
+```
+
+Or use a Redis connection string instead:
+
+```
+REDIS_URL=rediss://default:password@host:6379
 APP_SECRET=some-long-random-string
 ```
 
