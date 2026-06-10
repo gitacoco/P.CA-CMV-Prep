@@ -503,7 +503,7 @@ function SettingsPanel({ pass, setPass, cloudOn, onSave, stats }) {
         type="text"
         value={pass}
         onChange={(e) => setPass(e.target.value)}
-        placeholder="e.g. zhibang-2026"
+        placeholder="e.g. my-sync-key-2026"
         autoComplete="off"
         autoCapitalize="off"
         spellCheck={false}
