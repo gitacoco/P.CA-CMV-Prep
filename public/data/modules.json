@@ -1,0 +1,62 @@
+[
+  {
+    "id": "signs",
+    "en": "Traffic Signs",
+    "zh": "交通标志",
+    "count": 124
+  },
+  {
+    "id": "signals",
+    "en": "Signals & Markings",
+    "zh": "信号灯与标线",
+    "count": 40
+  },
+  {
+    "id": "rightofway",
+    "en": "Right of Way",
+    "zh": "路权",
+    "count": 144
+  },
+  {
+    "id": "speed",
+    "en": "Speed & Lane Use",
+    "zh": "限速与车道",
+    "count": 113
+  },
+  {
+    "id": "turns",
+    "en": "Turns, Intersections & Parking",
+    "zh": "转弯、路口与停车",
+    "count": 164
+  },
+  {
+    "id": "sharing",
+    "en": "Sharing the Road",
+    "zh": "共享道路",
+    "count": 64
+  },
+  {
+    "id": "safe",
+    "en": "Safe Driving & Hazards",
+    "zh": "安全驾驶与危险情况",
+    "count": 154
+  },
+  {
+    "id": "alcohol",
+    "en": "Alcohol, Drugs & Distraction",
+    "zh": "酒精、毒品与分心驾驶",
+    "count": 74
+  },
+  {
+    "id": "laws",
+    "en": "Licensing, Registration & Responsibility",
+    "zh": "驾照、登记与责任",
+    "count": 44
+  },
+  {
+    "id": "basics",
+    "en": "Vehicle Basics & Seatbelts",
+    "zh": "车辆基础与安全带",
+    "count": 75
+  }
+]
