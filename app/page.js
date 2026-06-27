@@ -2,13 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  clearLocal,
   emptyProgress,
-  getPassphrase,
-  setPassphrase as persistPassphrase,
   loadLocal,
   pullCloud,
   pushCloud,
 } from "../lib/sync";
+import {
+  getAuthState,
+  loginWithPasskey,
+  logoutAccount,
+  registerWithPasskey,
+} from "../lib/passkey-client";
 
 const OPTION_KEYS = ["A", "B", "C", "D"];
 
@@ -34,30 +39,61 @@ export default function Page() {
   const [activeMod, setActiveMod] = useState(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [pass, setPass] = useState("");
-  const [cloudOn, setCloudOn] = useState(false);
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [user, setUser] = useState(null);
+  const [accountName, setAccountName] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [ready, setReady] = useState(false);
+  const [initError, setInitError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      const [qd, md] = await Promise.all([
-        fetch("/data/questions-all.json").then((r) => r.json()),
-        fetch("/data/modules.json").then((r) => r.json()),
-      ]);
-      if (cancelled) return;
-      setQuestions(qd);
-      setModules(md);
+      try {
+        const [qd, md] = await Promise.all([
+          fetch("/data/questions-all.json").then((r) => {
+            if (!r.ok) throw new Error("questions failed");
+            return r.json();
+          }),
+          fetch("/data/modules.json").then((r) => {
+            if (!r.ok) throw new Error("modules failed");
+            return r.json();
+          }),
+        ]);
+        if (cancelled) return;
+        setQuestions(qd);
+        setModules(md);
 
-      const savedPass = getPassphrase();
-      setPass(savedPass);
-      setProgress(loadLocal());
-      const { enabled, progress: merged } = await pullCloud(savedPass);
-      if (cancelled) return;
-      setCloudOn(enabled);
-      setProgress(merged);
-      setReady(true);
+        const localProgress = loadLocal();
+        setProgress(localProgress);
+
+        try {
+          const auth = await getAuthState();
+          if (cancelled) return;
+          setAuthEnabled(auth.enabled);
+          setUser(auth.user);
+
+          if (auth.user) {
+            const { progress: accountProgress } = await pullCloud();
+            if (cancelled) return;
+            setProgress(accountProgress);
+          } else if (auth.enabled) {
+            clearLocal();
+            setProgress(emptyProgress());
+            setShowSettings(true);
+          }
+        } catch {
+          if (!cancelled) setAuthEnabled(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setInitError("Could not load question data.");
+        }
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     }
     init();
     return () => {
@@ -98,7 +134,7 @@ export default function Page() {
   function commit(next) {
     const merged = { ...next, updatedAt: Date.now() };
     setProgress(merged);
-    pushCloud(pass, merged);
+    pushCloud(merged);
   }
 
   function choose(key) {
@@ -172,13 +208,64 @@ export default function Page() {
     window.scrollTo(0, 0);
   }
 
-  function saveSettings() {
-    persistPassphrase(pass);
-    setShowSettings(false);
-    pullCloud(pass).then(({ enabled, progress: merged }) => {
-      setCloudOn(enabled);
-      setProgress(merged);
-    });
+  async function refreshAccountProgress() {
+    const result = await pullCloud();
+    setAuthEnabled(result.enabled);
+    setProgress(result.progress);
+  }
+
+  async function createAccount() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const nextUser = await registerWithPasskey(accountName);
+      setUser(nextUser);
+      await refreshAccountProgress();
+      setShowSettings(false);
+    } catch (err) {
+      setAuthError(err.message || "Could not create passkey.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signIn() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const nextUser = await loginWithPasskey();
+      setUser(nextUser);
+      await refreshAccountProgress();
+      setShowSettings(false);
+    } catch (err) {
+      setAuthError(err.message || "Could not sign in.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signOut() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      await logoutAccount();
+      setUser(null);
+      clearLocal();
+      setProgress(emptyProgress());
+      setShowSettings(true);
+    } catch (err) {
+      setAuthError(err.message || "Could not sign out.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  if (initError) {
+    return (
+      <div className="wrap">
+        <div className="empty">{initError}</div>
+      </div>
+    );
   }
 
   if (!ready || !questions || !modules) {
@@ -195,6 +282,8 @@ export default function Page() {
     (x) => progress.wrong[x.id] && !progress.cleared[x.id]
   ).length;
   const pathPct = total ? Math.round((answeredCount / total) * 100) : 0;
+  const syncOn = authEnabled && Boolean(user);
+  const syncLabel = syncOn ? "Synced" : authEnabled ? "Sign in" : "Local";
 
   // Per-module stats.
   function modStats(mid) {
@@ -243,8 +332,8 @@ export default function Page() {
                 <span className="wrong-badge">{wrongCount}</span>
               )}
             </button>
-            <span className={`sync-dot ${cloudOn ? "sync-on" : "sync-off"}`} />
-            {cloudOn ? "Synced" : "Local"}
+            <span className={`sync-dot ${syncOn ? "sync-on" : "sync-off"}`} />
+            {syncLabel}
             {" · "}
             <button className="link" onClick={() => setShowSettings((s) => !s)}>
               {showSettings ? "close" : "settings"}
@@ -259,10 +348,15 @@ export default function Page() {
       <div className="wrap">
         {showSettings && (
           <SettingsPanel
-            pass={pass}
-            setPass={setPass}
-            cloudOn={cloudOn}
-            onSave={saveSettings}
+            accountName={accountName}
+            setAccountName={setAccountName}
+            authEnabled={authEnabled}
+            user={user}
+            busy={authBusy}
+            error={authError}
+            onRegister={createAccount}
+            onLogin={signIn}
+            onLogout={signOut}
             stats={{ answeredCount, wrongCount, total }}
           />
         )}
@@ -490,33 +584,81 @@ function QuizView({
 }
 
 /* ---------- Settings ---------- */
-function SettingsPanel({ pass, setPass, cloudOn, onSave, stats }) {
+function SettingsPanel({
+  accountName,
+  setAccountName,
+  authEnabled,
+  user,
+  busy,
+  error,
+  onRegister,
+  onLogin,
+  onLogout,
+  stats,
+}) {
+  const signedIn = Boolean(user);
+
   return (
     <div className="panel">
-      <h3>Cross-device sync</h3>
-      <p>
-        输入一个个人密码。在手机和电脑上使用同一密码即可共享进度。Use the same
-        passphrase on every device to share progress.
-      </p>
-      <input
-        className="input"
-        type="text"
-        value={pass}
-        onChange={(e) => setPass(e.target.value)}
-        placeholder="e.g. my-sync-key-2026"
-        autoComplete="off"
-        autoCapitalize="off"
-        spellCheck={false}
-      />
-      <div className="row">
-        <button className="btn btn-primary" onClick={onSave}>
-          Save & sync
-        </button>
-        <span className="sync-status">
-          <span className={`sync-dot ${cloudOn ? "sync-on" : "sync-off"}`} />
-          {cloudOn ? "Cloud sync active" : "Local only (cloud not configured)"}
-        </span>
-      </div>
+      <h3>Passkey account</h3>
+      {!authEnabled && (
+        <p>Cloud account storage is not configured. Progress is local only.</p>
+      )}
+      {authEnabled && signedIn && (
+        <p>
+          Signed in as <strong>{user.name}</strong>. Progress is saved to this
+          account.
+        </p>
+      )}
+      {authEnabled && !signedIn && (
+        <>
+          <p>Create or open an account with Face ID, Touch ID, Windows Hello, or a security key.</p>
+          <input
+            className="input"
+            type="text"
+            value={accountName}
+            onChange={(e) => setAccountName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && accountName.trim() && !busy) onRegister();
+            }}
+            placeholder="Account name"
+            autoComplete="username webauthn"
+            autoCapitalize="off"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </>
+      )}
+
+      {authEnabled && (
+        <div className="row auth-row">
+          {signedIn ? (
+            <button className="btn" onClick={onLogout} disabled={busy}>
+              Sign out
+            </button>
+          ) : (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={onRegister}
+                disabled={busy || !accountName.trim()}
+              >
+                Create Passkey
+              </button>
+              <button className="btn" onClick={onLogin} disabled={busy}>
+                Sign in
+              </button>
+            </>
+          )}
+          <span className="sync-status">
+            <span className={`sync-dot ${signedIn ? "sync-on" : "sync-off"}`} />
+            {signedIn ? "Cloud sync active" : "Not signed in"}
+          </span>
+        </div>
+      )}
+
+      {error && <div className="auth-error">{error}</div>}
+
       <div className="stat-grid">
         <div className="stat">
           <div className="stat-num">{stats.answeredCount}</div>
