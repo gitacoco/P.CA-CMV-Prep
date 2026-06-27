@@ -2,14 +2,14 @@
 
 A minimal question-drilling web app for the California DL knowledge test.
 996 bilingual (EN / 简体中文) questions, sign images, wrong-answer review,
-bookmarks, and **cross-device progress sync**.
+bookmarks, and **Passkey-backed cross-device progress sync**.
 
-## How progress sync works
+## How account sync works
 
-You enter a personal **passphrase** in Settings. The same passphrase on your
-phone and your laptop maps to the same saved progress in the cloud, so your
-progress follows you across devices. The raw passphrase is never stored — the
-server hashes it (HMAC-SHA256 + a secret salt) to form the storage key.
+You create or sign in to a **Passkey account** from Settings. The app uses
+WebAuthn passkeys (Face ID, Touch ID, Windows Hello, or a security key) for
+registration and sign-in. Progress is stored by authenticated user ID, not by a
+shared phrase, so two users cannot collide by choosing the same text.
 
 If cloud storage isn't configured, the app still works fully and saves progress
 in the browser's localStorage (single-device only). So you can deploy first and
@@ -47,23 +47,33 @@ Redis integrations (`REDIS_URL`, `KV_URL`, or custom-prefixed `...REDIS_URL`).
 
 The Upstash free tier is far more than enough for personal use.
 
-### 4. Add a secret salt (recommended)
+### 4. Add a session secret
 
 Project **Settings → Environment Variables**, add:
 
 ```
 APP_SECRET = <any long random string>
+CRON_SECRET = <another long random string>
 ```
 
-This salts the passphrase hash. Keep it constant — if you change it later, old
-passphrases will map to new (empty) keys.
+This signs login session cookies. Keep it constant, or existing browser
+sessions will be invalidated. `CRON_SECRET` protects the Redis keepalive cron
+endpoint.
 
 ### 5. Redeploy
 
 **Deployments → ⋯ → Redeploy** so the new env vars take effect. Open the app,
-go to **settings**, enter your passphrase, tap **Save & sync**. The status dot
-turns green ("Cloud sync active"). Enter the same passphrase on your phone and
-your progress is shared.
+go to **settings**, create a Passkey account, and the status dot turns green
+("Cloud sync active"). Sign in with the same passkey account on another device
+to load the same progress.
+
+### 6. Keep the free Redis database active
+
+Free Redis Cloud databases may be deleted after inactivity. This repo includes a
+weekly Vercel Cron Job at `/api/cron/redis-keepalive` that writes one
+`cadl:keepalive` key with a 30-day TTL. Vercel sends `CRON_SECRET` as a bearer
+token when it invokes the job, so make sure the env var is set in Production and
+redeploy after changing it.
 
 ---
 
@@ -80,6 +90,7 @@ For local cloud-sync testing, create `.env.local`:
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
 APP_SECRET=some-long-random-string
+CRON_SECRET=some-other-long-random-string
 ```
 
 Or use a Redis connection string instead:
@@ -87,6 +98,7 @@ Or use a Redis connection string instead:
 ```
 REDIS_URL=rediss://default:password@host:6379
 APP_SECRET=some-long-random-string
+CRON_SECRET=some-other-long-random-string
 ```
 
 ---

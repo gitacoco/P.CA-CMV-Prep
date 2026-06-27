@@ -274,7 +274,7 @@ button {
   gap: 8px;
 }
 
-/* Settings / passphrase panel */
+/* Settings / account panel */
 .panel {
   margin: 16px 0;
   padding: 16px;
@@ -303,6 +303,14 @@ button {
 .sync-status {
   font-size: 12px;
   color: var(--muted);
+}
+.auth-row {
+  flex-wrap: wrap;
+}
+.auth-error {
+  margin-top: 10px;
+  color: var(--wrong);
+  font-size: 13px;
 }
 .sync-dot {
   display: inline-block;
